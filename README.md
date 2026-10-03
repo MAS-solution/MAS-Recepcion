@@ -38,7 +38,7 @@ Estados: `programado` → `recibido` → `ingresado` (o `cancelado`). La lista s
    ```
 
 3. **Notificaciones:**
-   - en *Edge Functions → Secrets*, cargar `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT` (por ejemplo `mailto:tu@mail.com`);
+   - en *Edge Functions → Secrets*, cargar `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT` (una URL o `mailto:`; usamos la URL de la app);
    - desplegar la función, ya sea con `npx supabase functions deploy notificar --project-ref <ref>` o pegando `supabase/functions/notificar/index.ts` en el editor de Edge Functions del panel.
 4. **Limpieza de fotos:**
    - activar las extensiones `pg_cron` y `pg_net` (*Database → Extensions*);
