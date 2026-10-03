@@ -18,6 +18,7 @@ Estados: `programado` → `recibido` → `ingresado` (o `cancelado`). La lista s
   - tiempo real;
   - la Edge Function `notificar`, que manda el push.
 - Las fotos se achican en el celular antes de subir (lado mayor 1600 px, JPEG 80%), unos 200–400 KB cada una.
+- **Las fotos se borran solas a los 2 meses.** La Edge Function `limpiar-fotos` corre todas las noches con pg_cron. No borra las fotos de camiones que todavía no se ingresaron en Gescom, y el camión queda con la marca "Fotos eliminadas el …".
 - **Nada sensible vive en este repo.** `config.js` solo tiene claves públicas (anon key y VAPID pública). Las fotos y los datos están en Supabase. La VAPID privada va como secret de Supabase.
 
 ## Puesta en marcha (una sola vez)
@@ -39,8 +40,13 @@ Estados: `programado` → `recibido` → `ingresado` (o `cancelado`). La lista s
 3. **Notificaciones:**
    - en *Edge Functions → Secrets*, cargar `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT` (por ejemplo `mailto:tu@mail.com`);
    - desplegar la función, ya sea con `npx supabase functions deploy notificar --project-ref <ref>` o pegando `supabase/functions/notificar/index.ts` en el editor de Edge Functions del panel.
-4. **`config.js`:** completar `SUPABASE_URL` y `SUPABASE_ANON_KEY`, que están en *Project Settings → API*.
-5. **GitHub Pages:** *Settings → Pages → Deploy from branch → main / root*.
+4. **Limpieza de fotos:**
+   - activar las extensiones `pg_cron` y `pg_net` (*Database → Extensions*);
+   - cargar el secret `CRON_SECRET` (un texto al azar);
+   - desplegar la función **sin verificación de JWT**: `npx supabase functions deploy limpiar-fotos --no-verify-jwt --project-ref <ref>`;
+   - correr `supabase/cron.sql`, reemplazando `<REF>` y `<CRON_SECRET>`.
+5. **`config.js`:** completar `SUPABASE_URL` y `SUPABASE_ANON_KEY`, que están en *Project Settings → API*.
+6. **GitHub Pages:** *Settings → Pages → Deploy from branch → main / root*.
 
 ## Uso en el celular
 

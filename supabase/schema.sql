@@ -33,8 +33,10 @@ create table if not exists public.camiones (
   fotos              text[] not null default '{}',     -- rutas en el bucket privado "facturas"
   ingresado_por      uuid references auth.users(id),
   ingresado_en       timestamptz,
-  comprobante_gescom text
+  comprobante_gescom text,
+  fotos_eliminadas_en timestamptz              -- las fotos se borran solas a los 2 meses (función limpiar-fotos)
 );
+alter table public.camiones add column if not exists fotos_eliminadas_en timestamptz;
 create index if not exists camiones_empresa_estado on public.camiones (empresa, estado, fecha_estimada);
 
 -- ---------- Suscripciones push (una por celular/navegador) ----------
@@ -143,6 +145,16 @@ revoke execute on function public.marcar_ingresado(bigint, text) from public, an
 grant execute on function public.marcar_recibido(bigint, text[], boolean, text) to authenticated;
 grant execute on function public.recibir_no_programado(text, text, numeric, text[], boolean, text) to authenticated;
 grant execute on function public.marcar_ingresado(bigint, text) to authenticated;
+
+-- La usa la función limpiar-fotos (con service_role) después de borrar archivos del bucket.
+create or replace function public.marcar_fotos_eliminadas(p_rutas text[])
+  returns integer language sql security definer set search_path = public as $$
+  with u as (
+    update camiones set fotos = '{}', fotos_eliminadas_en = now()
+     where fotos && p_rutas
+    returning 1)
+  select count(*)::int from u $$;
+revoke execute on function public.marcar_fotos_eliminadas(text[]) from public, anon, authenticated;
 
 -- ---------- Fotos de facturas: bucket PRIVADO, carpeta por empresa ----------
 insert into storage.buckets (id, name, public) values ('facturas', 'facturas', false)

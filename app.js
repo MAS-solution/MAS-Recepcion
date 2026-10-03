@@ -215,6 +215,7 @@ function cardRecibido(c) {
     <div class="meta">${lineas.join('<br>')}</div>
     ${c.no_programado || c.con_diferencias ? `<div class="acciones">${c.no_programado ? '<span class="badge b-accent">Sin programar</span>' : ''}${c.con_diferencias ? '<span class="badge b-bad">Con diferencias</span>' : ''}</div>` : ''}
     ${c.recepcion_obs ? `<div class="obs">${esc(c.recepcion_obs)}</div>` : ''}
+    ${c.fotos_eliminadas_en ? `<div class="meta">Fotos eliminadas el ${fmtHora(c.fotos_eliminadas_en)} (se guardan 2 meses)</div>` : ''}
     ${c.fotos && c.fotos.length ? `<div class="fotos">${c.fotos.map((f) => `<a target="_blank" rel="noopener" data-foto="${esc(f)}"><img alt="Foto de la factura" data-foto="${esc(f)}"></a>`).join('')}</div>` : ''}
     ${esAdmin() && c.estado === 'recibido' ? `<div class="acciones">
         <div class="campo campo-inline"><input id="gescom-${c.id}" placeholder="Nº comprobante en Gescom (opcional)" inputmode="numeric"></div>
