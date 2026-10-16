@@ -2,7 +2,7 @@
 
 Plataforma de recepción de camiones (por ahora para **611 Logística**).
 
-1. **Administración** carga los camiones que van a llegar: proveedor, fecha, nº de factura u orden, bultos y observación.
+1. **Administración** carga los camiones que van a llegar: proveedor, fecha, nº de factura u orden, cantidad de camiones, pallets y observación (si son varios camiones del mismo proveedor se crea uno por camión).
 2. **Depósito** ve "Por llegar" en el celular y toca **Recibido**. Saca foto de la factura y marca si hubo diferencias (faltantes, roturas, vencimientos cortos). Si llega un camión que no estaba cargado, usa **"Llegó uno sin programar"**.
 3. **Administración** recibe una **notificación push** con el proveedor. Revisa la foto y marca **Ingresado en Gescom**, opcionalmente con el nº de comprobante.
 

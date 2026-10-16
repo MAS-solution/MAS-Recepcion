@@ -182,10 +182,10 @@ function camionesPorDia() {
   for (const c of st.camiones) {
     if (c.estado === 'cancelado') continue;
     const d = diaDe(c);
-    const x = dias[d] || (dias[d] = { total: 0, llegados: 0, programados: 0, atrasados: 0, bultos: 0, lista: [] });
+    const x = dias[d] || (dias[d] = { total: 0, llegados: 0, programados: 0, atrasados: 0, pallets: 0, lista: [] });
     x.total++; x.lista.push(c);
     if (c.estado === 'programado') { if (d < hoy) x.atrasados++; else x.programados++; } else x.llegados++;
-    if (c.bultos != null) x.bultos += Number(c.bultos);
+    if (c.bultos != null) x.pallets += Number(c.bultos); // la columna bultos guarda pallets
   }
   return dias;
 }
@@ -211,7 +211,7 @@ function renderCalendario() {
     const puntos = x ? [x.llegados ? '<i class="p-ok"></i>' : '', x.programados ? '<i class="p-prog"></i>' : '', x.atrasados ? '<i class="p-bad"></i>' : ''].join('') : '';
     celdas += `<button class="${cls}" data-accion="cal-dia" data-dia="${iso}" aria-label="${n}: ${x ? x.total + ' camiones' : 'sin camiones'}">
       <span class="cal-n">${n}</span>
-      ${x ? `<b class="cal-total">${x.total}</b><span class="cal-bultos">${x.bultos ? x.bultos + ' bultos' : ''}</span><span class="cal-puntos">${puntos}</span>` : ''}
+      ${x ? `<b class="cal-total">${x.total}</b><span class="cal-bultos">${x.pallets ? x.pallets + ' pallets' : ''}</span><span class="cal-puntos">${puntos}</span>` : ''}
     </button>`;
   }
 
@@ -225,20 +225,25 @@ function renderCalendario() {
       <div><b>${sum('total')}</b><span>camiones</span></div>
       <div><b>${sum('llegados')}</b><span>llegaron</span></div>
       <div><b>${sum('programados') + sum('atrasados')}</b><span>por llegar</span></div>
-      <div><b>${sum('bultos')}</b><span>bultos</span></div>
+      <div><b>${sum('pallets')}</b><span>pallets</span></div>
     </div>
     <div class="cal-grilla">${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d) => `<div class="cal-sem">${d}</div>`).join('')}${celdas}</div>
     <div class="cal-ref"><span><i class="p-ok"></i>Llegó</span><span><i class="p-prog"></i>Programado</span><span><i class="p-bad"></i>Atrasado</span></div>`;
 
-  if (st.diaSel && st.diaSel.startsWith(st.mes)) {
-    const x = dias[st.diaSel];
-    html += `<div class="seccion">${fmtFecha(st.diaSel)} · ${x ? `${x.total} camión${x.total === 1 ? '' : 'es'}${x.bultos ? ' · ' + x.bultos + ' bultos' : ''}` : 'sin camiones'}</div>`;
-    if (x) html += x.lista.map((c) => (c.estado === 'programado' ? cardProgramado(c) : cardRecibido(c))).join('');
-  } else {
-    html += '<p class="vacio">Tocá un día para ver qué camiones llegan.</p>';
-  }
+  html += '<p class="vacio">Tocá un día para ver qué camiones llegan.</p>';
   if (st.mes < sumarDias(hoy, -DIAS_HISTORIAL).slice(0, 7)) html += `<p class="meta">Los camiones ya ingresados se muestran hasta ${DIAS_HISTORIAL} días atrás.</p>`;
   return html;
+}
+
+// Detalle del día en ventana: abajo del calendario quedaba fuera de pantalla en el celu.
+function modalDia(iso) {
+  const x = camionesPorDia()[iso];
+  abrirModal(`
+    <h2>${fmtFecha(iso)}</h2>
+    <p class="sub">${x ? `${x.total} ${x.total === 1 ? 'camión' : 'camiones'}${x.pallets ? ' · ' + x.pallets + ' pallets' : ''}` : 'Sin camiones este día.'}</p>
+    ${x ? x.lista.map((c) => (c.estado === 'programado' ? cardProgramado(c) : cardRecibido(c))).join('') : ''}
+    <div class="acciones"><button class="btn btn-ghost flex1" type="button" data-accion="cerrar">Cerrar</button></div>`);
+  cargarFotos();
 }
 
 function renderHistorial() {
@@ -254,7 +259,7 @@ function renderHistorial() {
 function datosCamion(c) {
   return [
     c.comprobante ? `Fact./OC <b class="mono">${esc(c.comprobante)}</b>` : '',
-    c.bultos != null ? `<b>${esc(c.bultos)}</b> bultos` : '',
+    c.bultos != null ? `<b>${esc(c.bultos)}</b> pallets` : '',
   ].filter(Boolean).join(' · ');
 }
 
@@ -328,13 +333,28 @@ function modalCamion(c) {
       <datalist id="lista-prov">${p.map((x) => `<option value="${esc(x)}">`).join('')}</datalist>
       <div class="fila">
         <div class="campo"><label for="f-fecha">Llega</label><input id="f-fecha" type="date" required value="${esc((c && c.fecha_estimada) || hoyART())}"></div>
-        <div class="campo"><label for="f-bultos">Bultos (aprox.)</label><input id="f-bultos" type="number" min="0" step="1" inputmode="numeric" value="${esc(c && c.bultos)}"></div>
+        ${c ? '' : '<div class="campo"><label for="f-cant">Camiones</label><input id="f-cant" type="number" min="1" max="30" step="1" inputmode="numeric" required value="1"></div>'}
       </div>
+      <div class="campo"><label for="f-bultos">${c ? 'Pallets' : 'Pallets (total)'}</label><input id="f-bultos" type="number" min="0" step="1" inputmode="numeric" value="${esc(c && c.bultos)}"><p class="meta" id="f-reparto" hidden></p></div>
       <div class="campo"><label for="f-comp">Nº factura / orden (si lo sabés)</label><input id="f-comp" value="${esc(c && c.comprobante)}"></div>
       <div class="campo"><label for="f-obs">Observación</label><textarea id="f-obs" rows="2">${esc(c && c.observacion)}</textarea></div>
       <div class="error" id="f-error" hidden></div>
       <div class="acciones"><button class="btn btn-primary flex1" type="submit">Guardar</button><button class="btn btn-ghost" type="button" data-accion="cerrar">Cancelar</button></div>
     </form>`);
+  // Varios camiones del mismo proveedor: se crea uno por camión (cada uno se recibe con su factura) y los pallets se reparten.
+  const cantidad = () => (c ? 1 : Math.max(1, Math.min(30, Number(document.getElementById('f-cant').value) || 1)));
+  const reparto = () => {
+    const v = document.getElementById('f-bultos').value, n = cantidad();
+    if (v === '') return Array(n).fill(null);
+    const t = Number(v), base = Math.floor(t / n);
+    return Array.from({ length: n }, (_, i) => base + (i < t % n ? 1 : 0));
+  };
+  const verReparto = () => {
+    const el = document.getElementById('f-reparto'), n = cantidad(), r = reparto();
+    el.hidden = n < 2 || r[0] == null;
+    if (!el.hidden) el.textContent = `${n} camiones: ${[...new Set(r)].length === 1 ? `${r[0]} pallets cada uno` : r.join(' + ') + ' pallets'}`;
+  };
+  if (!c) for (const id of ['f-cant', 'f-bultos']) document.getElementById(id).addEventListener('input', verReparto);
   document.getElementById('form-camion').addEventListener('submit', async (e) => {
     e.preventDefault();
     const datos = {
@@ -345,11 +365,12 @@ function modalCamion(c) {
       observacion: document.getElementById('f-obs').value.trim() || null,
     };
     const btn = e.submitter; btn.disabled = true;
+    const n = cantidad();
     const r = c ? await sb.from('camiones').update(datos).eq('id', c.id)
-                : await sb.from('camiones').insert({ ...datos, empresa: st.perfil.empresa });
+                : await sb.from('camiones').insert(reparto().map((b) => ({ ...datos, bultos: b, empresa: st.perfil.empresa })));
     btn.disabled = false;
     if (r.error) { const er = document.getElementById('f-error'); er.textContent = errorMsg(r.error); er.hidden = false; return; }
-    cerrarModal(); toast(c ? 'Camión actualizado' : 'Camión cargado'); cargar();
+    cerrarModal(); toast(c ? 'Camión actualizado' : n > 1 ? `${n} camiones cargados` : 'Camión cargado'); cargar();
   });
 }
 
@@ -364,7 +385,7 @@ function modalRecibir(c) {
         <datalist id="lista-prov">${proveedoresConocidos().map((x) => `<option value="${esc(x)}">`).join('')}</datalist>
         <div class="fila">
           <div class="campo"><label for="r-comp">Nº factura</label><input id="r-comp"></div>
-          <div class="campo"><label for="r-bultos">Bultos</label><input id="r-bultos" type="number" min="0" step="1" inputmode="numeric"></div>
+          <div class="campo"><label for="r-bultos">Pallets</label><input id="r-bultos" type="number" min="0" step="1" inputmode="numeric"></div>
         </div>`}
       <input id="r-file" type="file" accept="image/*" capture="environment" hidden>
       <button type="button" class="foto-btn" id="r-foto">Sacar foto de la factura</button>
@@ -482,13 +503,13 @@ document.addEventListener('click', async (e) => {
     case 'avisos': activarAvisos(); break;
     case 'cerrar': cerrarModal(); break;
     case 'nuevo': modalCamion(null); break;
-    case 'cal-dia': st.diaSel = st.diaSel === el.dataset.dia ? null : el.dataset.dia; render(); break;
+    case 'cal-dia': st.diaSel = el.dataset.dia; render(); modalDia(st.diaSel); break;
     case 'cal-mes': {
       const [a, m] = (st.mes || hoyART().slice(0, 7)).split('-').map(Number);
       st.mes = new Date(Date.UTC(a, m - 1 + Number(el.dataset.delta), 1)).toISOString().slice(0, 7);
       st.diaSel = null; render(); break;
     }
-    case 'cal-hoy': st.mes = hoyART().slice(0, 7); st.diaSel = hoyART(); render(); break;
+    case 'cal-hoy': st.mes = hoyART().slice(0, 7); st.diaSel = null; render(); break;
     case 'editar': if (c) modalCamion(c); break;
     case 'recibir': if (c) modalRecibir(c); break;
     case 'no-programado': modalRecibir(null); break;
