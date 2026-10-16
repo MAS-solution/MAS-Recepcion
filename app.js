@@ -8,7 +8,7 @@ const $modal = document.getElementById('modal');
 const TZ = 'America/Argentina/Buenos_Aires';
 const DIAS_HISTORIAL = 60;
 
-const st = { sesion: null, perfil: null, camiones: [], nombres: {}, tab: null, canal: null, urls: {} };
+const st = { sesion: null, perfil: null, camiones: [], nombres: {}, tab: null, canal: null, urls: {}, mes: null, diaSel: null };
 let sb;
 
 // ---------- Utilidades ----------
@@ -122,8 +122,8 @@ function renderLogin() {
 function tabsDe() {
   const n = (estado) => st.camiones.filter((c) => c.estado === estado).length;
   return esAdmin()
-    ? [['llegar', 'Por llegar', n('programado')], ['ingresar', 'A ingresar', n('recibido')], ['historial', 'Historial', 0]]
-    : [['llegar', 'Por llegar', n('programado')], ['recibidos', 'Recibidos', 0]];
+    ? [['llegar', 'Por llegar', n('programado')], ['calendario', 'Calendario', 0], ['ingresar', 'A ingresar', n('recibido')], ['historial', 'Historial', 0]]
+    : [['llegar', 'Por llegar', n('programado')], ['calendario', 'Calendario', 0], ['recibidos', 'Recibidos', 0]];
 }
 
 function render() {
@@ -154,6 +154,8 @@ function render() {
     const rec = st.camiones.filter((c) => ['recibido', 'ingresado'].includes(c.estado) && c.recibido_en && fmtISO(c.recibido_en) >= desde)
       .sort((a, b) => b.recibido_en.localeCompare(a.recibido_en));
     html += '<div class="seccion">Últimos 7 días</div>' + (rec.length ? rec.map(cardRecibido).join('') : '<p class="vacio">Todavía no recibiste camiones esta semana.</p>');
+  } else if (st.tab === 'calendario') {
+    html += renderCalendario();
   } else if (st.tab === 'historial') {
     html += '<div class="campo"><input id="buscar" type="search" placeholder="Buscar proveedor o comprobante"></div><div id="lista-historial"></div>';
   }
@@ -168,6 +170,76 @@ function render() {
 }
 
 const fmtISO = (ts) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(ts));
+
+// ---------- Calendario ----------
+// Cada camión cae en el día que llegó de verdad (recibido_en); si todavía no llegó, en su fecha estimada.
+const diaDe = (c) => (c.recibido_en ? fmtISO(c.recibido_en) : c.fecha_estimada);
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+function camionesPorDia() {
+  const hoy = hoyART();
+  const dias = {};
+  for (const c of st.camiones) {
+    if (c.estado === 'cancelado') continue;
+    const d = diaDe(c);
+    const x = dias[d] || (dias[d] = { total: 0, llegados: 0, programados: 0, atrasados: 0, bultos: 0, lista: [] });
+    x.total++; x.lista.push(c);
+    if (c.estado === 'programado') { if (d < hoy) x.atrasados++; else x.programados++; } else x.llegados++;
+    if (c.bultos != null) x.bultos += Number(c.bultos);
+  }
+  return dias;
+}
+
+function renderCalendario() {
+  const hoy = hoyART();
+  if (!st.mes) st.mes = hoy.slice(0, 7);
+  const [anio, mes] = st.mes.split('-').map(Number);
+  const dias = camionesPorDia();
+  const enMes = Object.entries(dias).filter(([d]) => d.startsWith(st.mes));
+  const sum = (k) => enMes.reduce((a, [, x]) => a + x[k], 0);
+  const max = Math.max(1, ...enMes.map(([, x]) => x.total));
+  const offset = (new Date(`${st.mes}-01T12:00:00Z`).getUTCDay() + 6) % 7; // lunes = 0
+  const largo = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
+
+  let celdas = '';
+  for (let i = 0; i < offset; i++) celdas += '<div class="cal-dia vacio-dia"></div>';
+  for (let n = 1; n <= largo; n++) {
+    const iso = `${st.mes}-${String(n).padStart(2, '0')}`;
+    const x = dias[iso];
+    const nivel = x ? Math.ceil((x.total / max) * 4) : 0;
+    const cls = ['cal-dia', `n${nivel}`, iso === hoy ? 'es-hoy' : '', iso === st.diaSel ? 'sel' : '', iso < hoy ? 'pasado' : ''].join(' ');
+    const puntos = x ? [x.llegados ? '<i class="p-ok"></i>' : '', x.programados ? '<i class="p-prog"></i>' : '', x.atrasados ? '<i class="p-bad"></i>' : ''].join('') : '';
+    celdas += `<button class="${cls}" data-accion="cal-dia" data-dia="${iso}" aria-label="${n}: ${x ? x.total + ' camiones' : 'sin camiones'}">
+      <span class="cal-n">${n}</span>
+      ${x ? `<b class="cal-total">${x.total}</b><span class="cal-bultos">${x.bultos ? x.bultos + ' bultos' : ''}</span><span class="cal-puntos">${puntos}</span>` : ''}
+    </button>`;
+  }
+
+  let html = `<div class="cal-head">
+      <button class="btn btn-ghost btn-sm" data-accion="cal-mes" data-delta="-1" aria-label="Mes anterior">‹</button>
+      <h2>${MESES[mes - 1]} ${anio}</h2>
+      <button class="btn btn-ghost btn-sm" data-accion="cal-mes" data-delta="1" aria-label="Mes siguiente">›</button>
+      ${st.mes !== hoy.slice(0, 7) ? '<button class="btn btn-ghost btn-sm" data-accion="cal-hoy">Hoy</button>' : ''}
+    </div>
+    <div class="cal-resumen">
+      <div><b>${sum('total')}</b><span>camiones</span></div>
+      <div><b>${sum('llegados')}</b><span>llegaron</span></div>
+      <div><b>${sum('programados') + sum('atrasados')}</b><span>por llegar</span></div>
+      <div><b>${sum('bultos')}</b><span>bultos</span></div>
+    </div>
+    <div class="cal-grilla">${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d) => `<div class="cal-sem">${d}</div>`).join('')}${celdas}</div>
+    <div class="cal-ref"><span><i class="p-ok"></i>Llegó</span><span><i class="p-prog"></i>Programado</span><span><i class="p-bad"></i>Atrasado</span></div>`;
+
+  if (st.diaSel && st.diaSel.startsWith(st.mes)) {
+    const x = dias[st.diaSel];
+    html += `<div class="seccion">${fmtFecha(st.diaSel)} · ${x ? `${x.total} camión${x.total === 1 ? '' : 'es'}${x.bultos ? ' · ' + x.bultos + ' bultos' : ''}` : 'sin camiones'}</div>`;
+    if (x) html += x.lista.map((c) => (c.estado === 'programado' ? cardProgramado(c) : cardRecibido(c))).join('');
+  } else {
+    html += '<p class="vacio">Tocá un día para ver qué camiones llegan.</p>';
+  }
+  if (st.mes < sumarDias(hoy, -DIAS_HISTORIAL).slice(0, 7)) html += `<p class="meta">Los camiones ya ingresados se muestran hasta ${DIAS_HISTORIAL} días atrás.</p>`;
+  return html;
+}
 
 function renderHistorial() {
   const q = (st.busqueda || '').toLowerCase().trim();
@@ -410,6 +482,13 @@ document.addEventListener('click', async (e) => {
     case 'avisos': activarAvisos(); break;
     case 'cerrar': cerrarModal(); break;
     case 'nuevo': modalCamion(null); break;
+    case 'cal-dia': st.diaSel = st.diaSel === el.dataset.dia ? null : el.dataset.dia; render(); break;
+    case 'cal-mes': {
+      const [a, m] = (st.mes || hoyART().slice(0, 7)).split('-').map(Number);
+      st.mes = new Date(Date.UTC(a, m - 1 + Number(el.dataset.delta), 1)).toISOString().slice(0, 7);
+      st.diaSel = null; render(); break;
+    }
+    case 'cal-hoy': st.mes = hoyART().slice(0, 7); st.diaSel = hoyART(); render(); break;
     case 'editar': if (c) modalCamion(c); break;
     case 'recibir': if (c) modalRecibir(c); break;
     case 'no-programado': modalRecibir(null); break;
