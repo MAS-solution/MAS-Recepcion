@@ -139,7 +139,7 @@ function renderLogin() {
   $app.innerHTML = `
     <form class="login" id="form-login">
       <h1>Ingresar</h1>
-      <p>Recepción de camiones · ${esc(cfg.EMPRESA_NOMBRE || '')}</p>
+      <p>Recepción y roturas · ${esc(cfg.EMPRESA_NOMBRE || '')}</p>
       <div class="campo"><label for="l-email">Email</label><input id="l-email" type="email" autocomplete="username" required></div>
       <div class="campo"><label for="l-pass">Contraseña</label><input id="l-pass" type="password" autocomplete="current-password" required></div>
       <div class="error" id="l-error" hidden></div>
