@@ -6,6 +6,10 @@ Plataforma de recepción de camiones (por ahora para **611 Logística**).
 2. **Depósito** ve "Por llegar" en el celular y toca **Recibido**. Saca foto de la factura y marca si hubo diferencias (faltantes, roturas, vencimientos cortos). Si llega un camión que no estaba cargado, usa **"Llegó uno sin programar"**.
 3. **Administración** recibe una **notificación push** con el proveedor. Revisa la foto y marca **Ingresado en Gescom**, opcionalmente con el nº de comprobante.
 
+Al entrar se elige la vista: **Recepción** (lo de arriba) o **Roturas**.
+
+**Roturas:** el depósito elige el proveedor, busca el artículo por código o descripción y carga las unidades rotas (fecha y hora se ponen solas). El admin ve la suma por SKU, filtra por proveedor, descarga CSV y marca **Ingresado en Gescom**: esas cargas salen del pendiente (arranca de cero) y quedan en el historial 2 meses (pg_cron `limpiar-roturas` borra lo más viejo). El maestro de artículos se copia de la BI de Gescom todos los días (`scripts/sync_articulos.py`, Action `articulos.yml`, secrets `PG*` y `SUPABASE_SERVICE_KEY`). Esquema: `supabase/roturas.sql`.
+
 Estados: `programado` → `recibido` → `ingresado` (o `cancelado`). La lista se actualiza sola en todos los celulares.
 
 ## Arquitectura

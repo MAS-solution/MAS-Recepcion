@@ -1,7 +1,7 @@
 {
   "name": "MAS Recepción",
   "short_name": "Recepción",
-  "description": "Recepción de camiones: programados, recibidos con foto de factura e ingresados en Gescom.",
+  "description": "Recepción de camiones y carga de roturas de mercadería, para ingresar en Gescom.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
