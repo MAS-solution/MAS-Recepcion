@@ -9,7 +9,7 @@ const TZ = 'America/Argentina/Buenos_Aires';
 const DIAS_HISTORIAL = 60;
 
 const st = { sesion: null, perfil: null, camiones: [], nombres: {}, tab: null, canal: null, urls: {}, mes: null, diaSel: null,
-  roturas: [], ingresos: [], articulos: null, rc: { prov: '', q: '', sel: null }, filtroProv: '', filtroHist: '' };
+  roturas: [], ingresos: [], articulos: null, rc: { prov: '', q: '', sel: null }, filtroProv: '', filtroHist: '', selSku: new Set() };
 let sb;
 
 // ---------- Utilidades ----------
@@ -410,14 +410,35 @@ function resumen(lista) {
 }
 const pendientes = (prov) => st.roturas.filter((r) => !r.ingreso_id && (!prov || r.prov_codigo === prov));
 
-function filaCarga(r) {
-  const puede = !r.ingreso_id && (esAdmin() || r.cargado_por === st.sesion.user.id);
-  return `<div class="carga">
-    <div class="flex1"><b>${esc(r.descripcion)}</b>
-      <div class="meta"><span class="mono">${esc(r.codigo)}</span> · ${esc(r.proveedor)} · ${fmtHora(r.cargado_en)} · ${esc(nombre(r.cargado_por))}</div></div>
-    <div class="carga-der"><b class="mono">${fmtU(r.cantidad)}</b>
-      ${puede ? `<button class="btn btn-ghost btn-sm" data-accion="rot-borrar" data-rot="${r.id}">Borrar</button>` : ''}</div>
-  </div>`;
+// Tabla Proveedor · Código · Descripción · Cantidad · Fecha de carga, ordenada por proveedor.
+function tabla(filas, fila, pie = '', check = '') {
+  return `<div class="tabla-wrap"><table class="tabla">
+    <thead><tr>${check}<th>Proveedor</th><th>Código</th><th>Descripción</th><th class="num-col">Cantidad</th><th>Fecha de carga</th><th class="acc-col"></th></tr></thead>
+    <tbody>${filas.map(fila).join('')}</tbody>${pie}</table></div>`;
+}
+
+function tablaCargas(lista) {
+  const ordenada = [...lista].sort((a, b) => a.proveedor.localeCompare(b.proveedor) || b.cargado_en.localeCompare(a.cargado_en));
+  return tabla(ordenada, (r) => {
+    const puede = !r.ingreso_id && (esAdmin() || r.cargado_por === st.sesion.user.id);
+    return `<tr><td class="prov-col">${esc(r.proveedor)}</td><td class="mono">${esc(r.codigo)}</td><td>${esc(r.descripcion)}</td>
+      <td class="num-col mono">${r.cantidad.toLocaleString('es-AR')}</td><td class="fecha-col">${fmtHora(r.cargado_en)}</td>
+      <td class="acc-col">${puede ? `<button class="btn-x" data-accion="rot-borrar" data-rot="${r.id}" aria-label="Borrar carga">Borrar</button>` : ''}</td></tr>`;
+  });
+}
+
+// Suma por SKU: la fecha es la de la última carga; tocando el renglón se ven las cargas.
+// En "Pendiente" (clic = true) cada renglón tiene una casilla para elegir qué se ingresó en Gescom.
+function tablaSku(filas, clic) {
+  const total = filas.reduce((a, f) => a + f.unidades, 0);
+  const todos = clic && filas.length > 0 && filas.every((f) => st.selSku.has(f.codigo));
+  return tabla(filas, (f) => `<tr${clic ? ` class="t-clic${st.selSku.has(f.codigo) ? ' t-sel' : ''}" data-accion="rot-sku" data-codigo="${esc(f.codigo)}"` : ''}>
+      ${clic ? `<td class="chk-col" data-accion="rot-check" data-codigo="${esc(f.codigo)}"><input type="checkbox" tabindex="-1" aria-label="Elegir ${esc(f.descripcion)}"${st.selSku.has(f.codigo) ? ' checked' : ''}></td>` : ''}
+      <td class="prov-col">${esc(f.proveedor)}</td><td class="mono">${esc(f.codigo)}</td><td>${esc(f.descripcion)}</td>
+      <td class="num-col mono"><b>${f.unidades.toLocaleString('es-AR')}</b></td>
+      <td class="fecha-col">${fmtHora(f.ultima)}${f.cargas > 1 ? `<span class="t-sub">${f.cargas} cargas</span>` : ''}</td><td class="acc-col">${clic ? '›' : ''}</td></tr>`,
+    `<tfoot><tr><td colspan="${clic ? 4 : 3}">Total</td><td class="num-col mono">${total.toLocaleString('es-AR')}</td><td colspan="2"></td></tr></tfoot>`,
+    clic ? `<th class="chk-col" data-accion="rot-check-todos"><input type="checkbox" tabindex="-1" aria-label="Elegir todos"${todos ? ' checked' : ''}></th>` : '');
 }
 
 function selectProv(id, valor, opciones, todos) {
@@ -437,7 +458,7 @@ function renderRoturas() {
   if (st.tab === 'rot-cargadas') {
     const pend = pendientes();
     return `<p class="meta">Lo que cargaste y todavía no se ingresó en Gescom. Si te equivocaste, borralo y cargalo de nuevo.</p>
-      ${pend.length ? pend.map(filaCarga).join('') : '<p class="vacio">No hay roturas pendientes.</p>'}`;
+      ${pend.length ? tablaCargas(pend) : '<p class="vacio">No hay roturas pendientes.</p>'}`;
   }
   if (st.tab === 'rot-resumen') {
     const provs = new Map();
@@ -446,6 +467,8 @@ function renderRoturas() {
     const ops = [...provs].sort((a, b) => a[1][0].localeCompare(b[1][0])).map(([c, [n, k]]) => [c, `${n} (${k})`]);
     const pend = pendientes(st.filtroProv);
     const filas = resumen(pend);
+    st.selSku = new Set(filas.map((f) => f.codigo).filter((c) => st.selSku.has(c))); // solo lo que se ve
+    const nSel = st.selSku.size;
     return `<div class="barra">${selectProv('rr-prov', st.filtroProv, ops, `Todos los proveedores (${pendientes().length})`)}</div>
       <div class="cal-resumen rot-kpi">
         <div><b>${filas.length}</b><span>${filas.length === 1 ? 'artículo' : 'artículos'}</span></div>
@@ -453,18 +476,16 @@ function renderRoturas() {
         <div><b>${pend.length}</b><span>cargas</span></div>
       </div>
       ${filas.length ? `<div class="acciones rot-acc">
-          <button class="btn btn-ok flex1" data-accion="rot-ingresar">Ingresado en Gescom</button>
+          <button class="btn btn-ok flex1" data-accion="rot-ingresar"${nSel ? '' : ' disabled'}>${nSel ? `Ingresado en Gescom (${nSel})` : 'Marcá lo que ingresaste en Gescom'}</button>
           <button class="btn btn-ghost" data-accion="rot-csv">Descargar CSV</button></div>
-        <div class="lista-sku">${filas.map((f) => `<button class="sku" data-accion="rot-sku" data-codigo="${esc(f.codigo)}">
-            <span class="flex1"><b>${esc(f.descripcion)}</b><span class="meta"><span class="mono">${esc(f.codigo)}</span>${st.filtroProv ? '' : ' · ' + esc(f.proveedor)} · ${f.cargas} ${f.cargas === 1 ? 'carga' : 'cargas'} · última ${fmtHora(f.ultima)}</span></span>
-            <b class="mono sku-u">${fmtU(f.unidades)}</b></button>`).join('')}</div>`
+        ${tablaSku(filas, true)}`
         : '<p class="vacio">No hay roturas pendientes de ingresar.</p>'}`;
   }
   if (st.tab === 'rot-historial') {
     const provs = new Map(st.roturas.filter((r) => r.ingreso_id).map((r) => [r.prov_codigo, r.proveedor]));
     const lista = st.ingresos.filter((i) => !st.filtroHist || st.roturas.some((r) => r.ingreso_id === i.id && r.prov_codigo === st.filtroHist));
     return `<div class="barra">${selectProv('rh-prov', st.filtroHist, [...provs].sort((a, b) => a[1].localeCompare(b[1])), 'Todos los proveedores')}</div>
-      ${lista.length ? lista.map(cardIngreso).join('') : `<p class="vacio">Sin ingresos en los últimos ${DIAS_HISTORIAL} días.</p>`}
+      ${lista.length ? tablaIngresos(lista) : `<p class="vacio">Sin ingresos en los últimos ${DIAS_HISTORIAL} días.</p>`}
       <p class="meta">El historial se guarda ${DIAS_HISTORIAL} días.</p>`;
   }
   return '';
@@ -474,20 +495,17 @@ function filasIngreso(i) {
   return st.roturas.filter((r) => r.ingreso_id === i.id && (!st.filtroHist || r.prov_codigo === st.filtroHist));
 }
 
-function cardIngreso(i) {
-  const rs = filasIngreso(i);
-  return `<article class="card">
-    <div class="card-top"><div><h3>${i.prov_codigo ? esc(provNombre(i.prov_codigo)) : 'Todos los proveedores'}</h3>
-      <div class="meta">Ingresó <b>${esc(nombre(i.ingresado_por))}</b> · ${fmtHora(i.ingresado_en)}${i.comprobante ? ` · Gescom <b class="mono">${esc(i.comprobante)}</b>` : ''}</div></div>
-      <span class="badge b-ingresado">Ingresado</span></div>
-    <div class="meta"><b>${resumen(rs).length}</b> ${resumen(rs).length === 1 ? 'artículo' : 'artículos'} · <b>${sumaU(rs).toLocaleString('es-AR')}</b> unidades</div>
-    <div class="acciones"><button class="btn btn-ghost btn-sm" data-accion="rot-ver-ingreso" data-ing="${i.id}">Ver detalle</button></div>
-  </article>`;
+function tablaIngresos(lista) {
+  return `<div class="tabla-wrap"><table class="tabla">
+    <thead><tr><th>Fecha</th><th>Proveedor</th><th>Gescom</th><th class="num-col">Cantidad</th><th class="acc-col"></th></tr></thead>
+    <tbody>${lista.map((i) => `<tr class="t-clic" data-accion="rot-ver-ingreso" data-ing="${i.id}">
+      <td class="fecha-col">${fmtHora(i.ingresado_en)}</td><td>${i.prov_codigo ? esc(provNombre(i.prov_codigo)) : 'Todos'}</td>
+      <td class="mono">${esc(i.comprobante || '—')}</td><td class="num-col mono">${sumaU(filasIngreso(i)).toLocaleString('es-AR')}</td><td class="acc-col">›</td></tr>`).join('')}</tbody></table></div>`;
 }
 
 function montarRoturas() {
   const on = (id, ev, fn) => { const el = document.getElementById(id); if (el) el.addEventListener(ev, fn); };
-  on('rr-prov', 'change', (e) => { st.filtroProv = e.target.value; render(); });
+  on('rr-prov', 'change', (e) => { st.filtroProv = e.target.value; st.selSku.clear(); render(); });
   on('rh-prov', 'change', (e) => { st.filtroHist = e.target.value; render(); });
   on('rc-prov', 'change', (e) => { st.rc = { prov: e.target.value, q: '', sel: null }; pintarZona(true); });
   if (document.getElementById('rc-prov')) { pintarZona(false); pintarUltimas(); }
@@ -513,7 +531,7 @@ function pintarZona(foco) {
   }
   z.innerHTML = `<div class="campo"><label for="rc-buscar">Artículo</label>
       <input id="rc-buscar" type="search" placeholder="Código o descripción" autocomplete="off" enterkeyhint="search"></div>
-    <div id="rc-res" class="lista-sku"></div>`;
+    <div id="rc-res"></div>`;
   const inp = document.getElementById('rc-buscar');
   inp.value = st.rc.q;
   inp.addEventListener('input', () => { st.rc.q = inp.value; pintarResultados(); });
@@ -537,8 +555,8 @@ function buscar() {
 function pintarResultados() {
   const r = buscar(), MAX = 40;
   document.getElementById('rc-res').innerHTML = !r.length ? '<p class="vacio">No hay artículos con ese código o descripción.</p>'
-    : r.slice(0, MAX).map((a) => `<button class="sku" type="button" data-accion="rc-elegir" data-codigo="${esc(a.codigo)}">
-        <span class="flex1"><b>${esc(a.descripcion)}</b><span class="meta mono">${esc(a.codigo)}</span></span></button>`).join('')
+    : `<div class="tabla-wrap"><table class="tabla"><thead><tr><th>Código</th><th>Descripción</th></tr></thead><tbody>${r.slice(0, MAX).map((a) =>
+        `<tr class="t-clic" data-accion="rc-elegir" data-codigo="${esc(a.codigo)}"><td class="mono">${esc(a.codigo)}</td><td>${esc(a.descripcion)}</td></tr>`).join('')}</tbody></table></div>`
       + (r.length > MAX ? `<p class="meta">Hay ${r.length} artículos: escribí para achicar la lista.</p>` : '');
 }
 
@@ -561,7 +579,7 @@ function pintarUltimas() {
   const el = document.getElementById('rc-ultimas');
   if (!el) return;
   const mias = pendientes().filter((r) => r.cargado_por === st.sesion.user.id).slice(0, 15);
-  el.innerHTML = mias.length ? mias.map(filaCarga).join('') : '<p class="vacio">Todavía no cargaste roturas pendientes.</p>';
+  el.innerHTML = mias.length ? tablaCargas(mias) : '<p class="vacio">Todavía no cargaste roturas pendientes.</p>';
 }
 
 function modalSku(codigo) {
@@ -569,18 +587,22 @@ function modalSku(codigo) {
   if (!rs.length) return;
   abrirModal(`<h2>${esc(rs[0].descripcion)}</h2>
     <p class="sub"><span class="mono">${esc(codigo)}</span> · ${esc(rs[0].proveedor)} · ${fmtU(sumaU(rs))} en ${rs.length} ${rs.length === 1 ? 'carga' : 'cargas'}</p>
-    ${rs.map(filaCarga).join('')}
+    ${tablaCargas(rs)}
     <div class="acciones"><button class="btn btn-ghost flex1" type="button" data-accion="cerrar">Cerrar</button></div>`);
 }
 
+// Se ingresan solo los artículos marcados; el resto sigue en Pendiente.
 function modalIngresarRoturas() {
-  const pend = pendientes(st.filtroProv);
+  const pend = pendientes(st.filtroProv).filter((r) => st.selSku.has(r.codigo));
   if (!pend.length) return;
   const ids = pend.map((r) => r.id);
+  const provs = [...new Set(pend.map((r) => r.prov_codigo))];
+  const prov = st.filtroProv || (provs.length === 1 ? provs[0] : '');
+  const quedan = pendientes(st.filtroProv).length - pend.length;
   abrirModal(`<h2>Ingresado en Gescom</h2>
-    <p class="sub">${st.filtroProv ? esc(provNombre(st.filtroProv)) : 'Todos los proveedores'} · ${resumen(pend).length} ${resumen(pend).length === 1 ? 'artículo' : 'artículos'} · ${fmtU(sumaU(pend))}</p>
+    <p class="sub">${prov ? esc(provNombre(prov)) : 'Varios proveedores'} · ${resumen(pend).length} ${resumen(pend).length === 1 ? 'artículo' : 'artículos'} · ${fmtU(sumaU(pend))}</p>
     <form id="form-ing-rot">
-      <p class="meta">Estas cargas salen de "Pendiente" y el contador arranca de cero. Quedan en el historial ${DIAS_HISTORIAL} días.</p>
+      <p class="meta">Los artículos marcados salen de "Pendiente" y su contador arranca de cero${quedan ? '; lo que no marcaste sigue pendiente' : ''}. Quedan en el historial ${DIAS_HISTORIAL} días.</p>
       <div class="campo"><label for="ir-comp">Nº comprobante en Gescom (opcional)</label><input id="ir-comp" inputmode="numeric"></div>
       <div class="error" id="ir-error" hidden></div>
       <div class="acciones"><button class="btn btn-ok flex1" type="submit">Confirmar</button><button class="btn btn-ghost" type="button" data-accion="cerrar">Cancelar</button></div>
@@ -588,10 +610,11 @@ function modalIngresarRoturas() {
   document.getElementById('form-ing-rot').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = e.submitter; btn.disabled = true;
-    const { error } = await sb.rpc('ingresar_roturas', { p_ids: ids, p_prov_codigo: st.filtroProv || null, p_comprobante: document.getElementById('ir-comp').value });
+    const { error } = await sb.rpc('ingresar_roturas', { p_ids: ids, p_prov_codigo: prov || null, p_comprobante: document.getElementById('ir-comp').value });
     btn.disabled = false;
     if (error) { const er = document.getElementById('ir-error'); er.textContent = errorMsg(error); er.hidden = false; return; }
-    cerrarModal(); toast('Listo: marcado como ingresado, el pendiente arranca de cero.'); cargarRoturas();
+    st.selSku.clear();
+    cerrarModal(); toast('Listo: marcado como ingresado en Gescom.'); cargarRoturas();
   });
 }
 
@@ -601,7 +624,7 @@ function modalIngreso(id) {
   const filas = resumen(filasIngreso(i));
   abrirModal(`<h2>${i.prov_codigo ? esc(provNombre(i.prov_codigo)) : 'Todos los proveedores'}</h2>
     <p class="sub">Ingresado ${fmtHora(i.ingresado_en)}${i.comprobante ? ' · Gescom ' + esc(i.comprobante) : ''} · ${fmtU(filas.reduce((a, f) => a + f.unidades, 0))}</p>
-    <div class="lista-sku">${filas.map((f) => `<div class="sku"><span class="flex1"><b>${esc(f.descripcion)}</b><span class="meta"><span class="mono">${esc(f.codigo)}</span> · ${esc(f.proveedor)}</span></span><b class="mono sku-u">${fmtU(f.unidades)}</b></div>`).join('')}</div>
+    ${tablaSku(filas, false)}
     <div class="acciones"><button class="btn btn-ghost flex1" type="button" data-accion="rot-csv" data-ing="${i.id}">Descargar CSV</button><button class="btn btn-ghost flex1" type="button" data-accion="cerrar">Cerrar</button></div>`);
 }
 
@@ -820,6 +843,11 @@ document.addEventListener('click', async (e) => {
     case 'rc-elegir': elegirArticulo(el.dataset.codigo); break;
     case 'rc-otro': st.rc.sel = null; pintarZona(true); break;
     case 'rot-sku': modalSku(el.dataset.codigo); break;
+    case 'rot-check': { const k = el.dataset.codigo; if (st.selSku.has(k)) st.selSku.delete(k); else st.selSku.add(k); render(); break; }
+    case 'rot-check-todos': {
+      const cods = resumen(pendientes(st.filtroProv)).map((f) => f.codigo);
+      st.selSku = cods.every((k) => st.selSku.has(k)) ? new Set() : new Set(cods); render(); break;
+    }
     case 'rot-ingresar': modalIngresarRoturas(); break;
     case 'rot-csv': descargarCsv(el.dataset.ing ? Number(el.dataset.ing) : null); break;
     case 'rot-ver-ingreso': modalIngreso(Number(el.dataset.ing)); break;
@@ -832,7 +860,7 @@ document.addEventListener('click', async (e) => {
       if (error) { el.disabled = false; toast(errorMsg(error), true); break; }
       st.roturas = st.roturas.filter((r) => r.id !== rid);
       toast('Carga borrada');
-      if (!$modal.hidden) { const r = el.closest('.carga'); if (r) r.remove(); }
+      if (!$modal.hidden) { const r = el.closest('tr'); if (r) r.remove(); }
       refrescar();
       break;
     }

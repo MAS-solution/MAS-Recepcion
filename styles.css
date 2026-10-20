@@ -182,3 +182,24 @@ button.sku:hover{border-color:var(--ink-soft)}
 .rc-sel h3{font-size:17px}
 .rc-cant{margin-top:12px}
 .rc-cant input{font-size:22px;font-family:var(--mono);text-align:center}
+
+/* ---------- Tablas (Roturas) ---------- */
+.tabla-wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:12px}
+.tabla{width:100%;border-collapse:collapse;font-size:13px}
+.tabla th{position:sticky;top:0;background:var(--paper);text-align:left;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--ink-soft);padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.tabla td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.tabla tbody tr:last-child td{border-bottom:0}
+.tabla .mono{font-size:12.5px;white-space:nowrap}
+.tabla .num-col{text-align:right;white-space:nowrap}
+.tabla .fecha-col{white-space:nowrap;color:var(--ink-soft);font-size:12px}
+.tabla .prov-col{font-size:12px;color:var(--ink-soft);max-width:120px}
+.tabla .acc-col{width:1%;text-align:right;white-space:nowrap;color:var(--ink-soft)}
+.tabla .t-sub{display:block;font-size:11px}
+.tabla tfoot td{font-weight:700;background:var(--paper);border-top:1.5px solid var(--line);border-bottom:0}
+.tabla tr.t-clic{cursor:pointer}
+.tabla tr.t-clic:hover td{background:var(--accent-tint)}
+.btn-x{border:1.5px solid var(--line);background:transparent;color:var(--ink-soft);border-radius:7px;padding:5px 8px;font-size:12px;min-height:32px}
+.btn-x:hover{border-color:var(--bad);color:var(--bad)}
+.tabla .chk-col{width:1%;padding:0;text-align:center;cursor:pointer}
+.tabla .chk-col input{width:20px;height:20px;margin:10px;accent-color:var(--ok);pointer-events:none;vertical-align:middle}
+.tabla tr.t-sel td{background:var(--ok-bg)}

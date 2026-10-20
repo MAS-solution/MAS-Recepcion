@@ -1,5 +1,5 @@
 // Service worker: deja la app instalable, cachea los archivos propios y muestra las notificaciones push.
-const CACHE = 'mas-recepcion-v4';
+const CACHE = 'mas-recepcion-v5';
 const ARCHIVOS = ['./', 'index.html', 'styles.css', 'app.js', 'config.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {
